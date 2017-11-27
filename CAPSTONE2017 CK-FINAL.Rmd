@@ -1,0 +1,447 @@
+---
+title: "CAPSTONE2017"
+author: "CHRIS KOGUT"
+date: "November 25, 2017"
+output:
+  word_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#used to read from twitter
+install.packages("twitteR")
+#Retrieve data from Twitter
+install.packages("RCurl")
+# used for str_split
+install.packages("stringr")
+#used for vetor  and corpus cretaion
+install.packages("tm")
+# USED FOR SENTIMENT SCORING
+install.packages("plyr")
+install.packages("dplyr")
+#USED for plotting AND wordcloud
+install.packages("ggplot2")
+install.packages("wordcloud")
+# Naive Bayes
+install.packages("e1071")
+#used for cross_validation
+install.packages("RTextTools")
+install.packages("caret")
+
+library("stringr")
+library("twitteR")
+library("RCurl")
+library("ggplot2")
+library("wordcloud")
+library("tm")
+library("e1071")
+library("plyr")
+library("dplyr")
+library ("RTextTools")  
+library("caret")
+library("e1071")
+library("randomForest")
+```
+
+## Project Objective
+Theme for project: Sentiment Analysis based on the Twitter Data.
+Coffee is one of the most popular drinks in Canada. 
+People order coffee from various vendors based on price, taste, location.
+My goal is to evaluate coffee preferences from two companies Tim Horton's and Starbucks based on the sentiment Analysis.
+
+```{r code, echo=FALSE}
+#constants
+sk <-"KVS2vCYpZizvDIzIuGZ9TU8Pw"
+ssk <- "vPqxGbUFkyS4eudND2DLU9SBS5iamnf37dTT2ffnyNrvPTcIWn" 
+
+###FUNCTIONS
+getStopWords <- function()
+{
+  #load Stopwords
+  c = readLines("c:\\data\\stopwords.txt")
+  cs=unlist(strsplit(c,","))
+  stopwords= stopwords('eng')
+  head(stopwords)
+  '#removed cup and holiday as it shows for all types of sentiment'
+  c= c(cs,stopwords,c("hortons","tim","shit","fucked","fuck","cup","holiday","amp","cups","christmas","people","gay","latte","fuck","drink","drinks","conservatives","agenda"))
+ 
+  # c= c("love", "free", "favorite", "thank", "hot", "happy", "perfect", "win", "card", "like", "cute", "good", "gold", "warm")
+  commonStopWords = unique (c)
+  sw= unique(c(gsub("'","",commonStopWords),commonStopWords))
+  return(sw)
+}
+
+prepareData <- function(corpus)
+{
+  #Cleanup corpus.tmp Data
+  corpus.tmp <- gsub(pattern='https\\S+\\s*', replace=" ",corpus )
+  corpus.tmp <- removeWords(corpus.tmp,getStopWords())
+  corpus.tmp <- gsub(pattern='#\\S+\\s*', replace=" ",corpus.tmp )
+  corpus.tmp <- gsub(pattern='@\\S+\\s*', replace=" ",corpus.tmp )
+  corpus.tmp <- gsub(pattern="\\'", replace=" ",corpus.tmp )
+  corpus.tmp <- gsub(pattern="\\`", replace="",corpus.tmp )
+  corpus.tmp <- gsub(pattern="\\W", replace=" ",corpus.tmp )
+  corpus.tmp <- gsub(pattern="\\d", replace=" ",corpus.tmp )
+  corpus.tmp <- tolower(corpus.tmp)
+  corpus.tmp <- gsub(pattern="starbucks", replace=" ",corpus.tmp )
+  corpus.tmp <- gsub(pattern="starbucks", replace=" ",corpus.tmp )
+  corpus.tmp <- gsub(pattern="timhortons", replace=" ",corpus.tmp )
+  corpus.tmp <- gsub(pattern="coffee", replace=" ",corpus.tmp )
+  corpus.tmp <- gsub(pattern="coffee", replace=" ",corpus.tmp )
+  corpus.tmp <- gsub(pattern="\\b[[:alpha:]]{1,2}\\b *", replace=" ",corpus.tmp )
+  corpus.tmp <- stripWhitespace(corpus.tmp )
+  corpus.tmp <- removeWords(corpus.tmp,getStopWords())
+
+  #REMOVE EXTRA SPACES
+  corpus.tmp <- gsub(pattern="^ | $", replace="",corpus.tmp )
+  return (corpus.tmp)
+} 
+
+score.sentiment <- function(sentences, pos.words, neg.words, .progress='none')
+{
+  require(plyr)
+  require(stringr)
+  scores <- laply(sentences, function(sentence, pos.words, neg.words){
+    word.list <- str_split(sentence, '\\s+')
+    words <- unlist(word.list)
+    pos.matches <- match(words, pos.words)
+    neg.matches <- match(words, neg.words)
+    pos.matches <- !is.na(pos.matches)
+    neg.matches <- !is.na(neg.matches)
+    score <- sum(pos.matches) - sum(neg.matches)
+    return(score)
+  }, pos.words, neg.words, .progress=.progress)
+  scores.df <- data.frame(score=scores, text=sentences)
+  return(scores.df)
+}
+
+#Your Access Token
+#This access token can be used to make API requests on your own account's behalf. Do not share your access token secret with anyone.
+Access_Token <- "47718023-izo2f4YQUK7rQullVEMG5nGHouo0lufzHQvkBqbaa"
+Access_Token_Secret  <-"2svdhcCzuT8q4qQIsexZ19PW9CJxNGFNbEp9KEyjzneI3"
+Owner   <- "kogutc"
+Owner_ID  <- "47718023"
+
+#Read From Twitter First  (Daily)
+#3setup_twitter_oauth(sk,ssk,Access_Token,Access_Token_Secret)
+
+#RETRIEVE & SAVE DATA
+twTH = twitteR::searchTwitter('#starbucks',n=8000,lang="en") 
+dataTHortons= twitteR::twListToDF(twTH)
+saveRDS (dataTHortons,file="c:\\data\\starbucks1127.Rda")
+
+####LOAD POSITIVE AND NEGATIVE KEYWORDS
+pos <-scan("c:\\data\\positiveWords.txt",what='character',comment.char=";" )
+neg <-scan("c:\\data\\negativeWords.txt",what='character',comment.char=";" )
+
+pos.words <- c(pos, 'upgrade')
+neg.words <- c(neg, 'wtf', 'wait', 'waiting', 'epicfail')
+
+
+  
+#Next Read All Files
+df <-readRDS("c:\\data\\starbucks1127.Rda")
+#df <-readRDS("c:\\data\\starbucksTMP1126_200.Rda")
+
+#access tweets and create cumulative file
+  #searchterm="c:\\data\\starbucksTMP1125"
+  searchterm = "c:\\data\\starbucks1127"
+  df <- df[, order(names(df))]
+  df$created <- strftime(df$created, '%Y-%m-%d')
+  #if (file.exists(paste(searchterm, '_stack.csv'))==FALSE)  
+  write.csv(df, file=paste(searchterm, '_stack.csv'), row.names=F)
+  #Remove Duplicates  
+  #merge last access with cumulative file and remove duplicates
+  stack <- NULL
+  stack <- read.csv(file=paste(searchterm, '_stack.csv'))
+  #stack <- rbind(stack, df)#stack <- stack[!duplicated(stack$text),]
+  #stack <- stack[!duplicated(stack$id),]
+  write.csv(stack, file=paste(searchterm, '_stack.csv'), row.names=F)
+ 
+  
+  #EXTRACT TEXT TWEET
+  coffee_text <- sapply(stack$text,function(row) iconv(row, "latin1", "ASCII", sub=""))
+  #str_split(coffee_text [1]," ")
+  
+  #CLEAN UP DATA REMOVE NOT IMPORTANT KEYWORDS
+  coffee_text <- prepareData(coffee_text)
+
+  #START evaluation get scores for each tweet
+  scores <- score.sentiment(coffee_text, pos.words, neg.words, .progress='none')
+  write.csv(scores, file=paste(searchterm, '_scores.csv'), row.names=TRUE) #save evaluation results into the file
+  #total evaluation: positive / negative / neutral
+  stat <- scores
+  stat$created <- stack$created
+  stat$created <- as.Date(stat$created)
+  stat <- mutate(stat, tweet=ifelse(stat$score > 0, 'positive', ifelse(stat$score < 0, 'negative', 'neutral')))
+  #for now remove neutral
+  #stat <- mutate(stat, sentiment=ifelse(stat$score > 0, 1, ifelse(stat$score < 0, -1, 0)))
+  stat <- mutate(stat, sentiment=ifelse(stat$score > 0, 1, 0))
+  
+  
+  
+  by.tweet <- group_by(stat, tweet, created)
+  by.tweet <- summarise(by.tweet, number=n())
+  write.csv(by.tweet, file=paste(searchterm, '_opinion.csv'), row.names=TRUE)
+  #create chart
+  ggplot(by.tweet, aes(created, number)) + geom_line(aes(group=tweet, color=tweet), size=2) +
+    geom_point(aes(group=tweet, color=tweet), size=4) +
+    theme(text = element_text(size=18), axis.text.x = element_text(angle=90, vjust=1)) +
+    #stat_summary(fun.y = 'sum', fun.ymin='sum', fun.ymax='sum', colour = 'yellow', size=2, geom = 'line') +
+    ggtitle(searchterm)
+  ggsave(file=paste(searchterm, '_plot.jpeg'))
+  
+  neutral  <- scores[scores['score']== 0,]  
+  positive <- scores[scores['score'] > 0,]  
+  negative <- scores[scores['score'] < 0,]  
+  
+ count(neutral)
+  
+ neuW <- unlist (str_split  (neutral$text, pattern="\\s+"))
+  posW <- unlist (str_split  (positive$text, pattern="\\s+"))
+  negW <- unlist (str_split  (negative$text, pattern="\\s+"))
+  wordcloud (neuW, min.freq = 5,random.order=FALSE, color=rainbow(7),scale=c(3,.5),max.words=200)
+  wordcloud (posW, min.freq = 5,random.order=FALSE, color=rainbow(7),scale=c(3,.5),max.words=200)
+  wordcloud (negW, min.freq = 3,random.order=FALSE, color=rainbow(7),scale=c(3,.5),max.words=200)
+  
+  
+ slices <- as.numeric( c(count(neutral), count(positive), count(negative)))
+ lbls <- c("neutral", "positive", "negative")
+ pie(slices, labels = lbls, main="Pie Chart of Sentiments")
+  
+  
+  summary(scores)
+  summary(stat)
+ 
+  hist(stat$score)
+  ###### FIX hist(stat$created, "days")
+  
+  
+  ## NO PREPARE FOR CLASSIFICATION
+  head (coffee_text)
+  summary(coffee_text)
+  #str(coffee_text) -> gives character vector
+  
+  #CREATE CORPUS
+  coffee_corpus = Corpus(VectorSource(coffee_text))
+
+  #ADD VENDORS FOR NOW 1
+  vendors  <- c("starbucks")
+
+  coffee_clean<-coffee_corpus
+  #CONVERT DATA INTO MATRIX
+  tdm <- TermDocumentMatrix(coffee_clean)
+  #CREATE AS LIST
+  result  <- list (vendor=vendors,tdm=tdm)
+  
+  ## NOW create matrix   COLUMNS ARE TWEETS ,ROWS ARE TERMS, VALUE NUMBER OF OCCURENCES OIN THE TWEET
+  ## FOR EACH WORD
+  t1 <- t(data.matrix(result[["tdm"]]))
+  #CONVERT it to dataframe
+  s.df <-as.data.frame(t1, stringAsFactors = FALSE)
+
+  s.dff <- NULL
+  
+    
+  #don't add main class before removing columns
+  #SUBSET select specific columns only from the model data
+  #subset(df, select=-c(z,u))
+  #colSums(s.dff) 
+  
+  s.dff <- s.df[colSums(s.df) >=60]
+  s.dff <- s.dff[colSums(s.dff) <=290]
+  nrow(s.dff)
+  ncol(s.dff)
+  
+  
+  #add sentiment column
+  s.dff$sentiment <- as.numeric(stat$sentiment) 
+  hist(as.numeric(s.dff$sentiment),main="Not balanced data set")
+  
+ #Need to undersample the majority class to balance the data and then train the model with this balanced data.
+  #With imbalanced data sets, an algorithm doesn't get the necessary information about the minority class to make an accurate prediction
+  #Undersampling
+  #Other methods also available:  
+  #https://www.analyticsvidhya.com/blog/2016/03/practical-guide-deal-imbalanced-classification-problems/   
+    #Oversampling
+    #Synthetic Data Generation
+    #Cost Sensitive Learning
+  #s.set <-s.df[s.df$sentiment==0,1]
+  
+  mainClass <- as.numeric(count(s.dff[s.dff$sentiment==0,]))
+  as.numeric(count(s.dff[s.dff$sentiment ==0,]))
+  #create subset
+  smp_size <- floor(0.4 * mainClass)
+  set.seed(123)
+  s.mainclass <- s.dff[s.dff$sentiment==0,]
+  s.undersample_ind <- sample(seq_len(nrow(s.mainclass)), size = smp_size)
+  s.dff1 <- s.mainclass[-s.undersample_ind, ]
+  
+ #remove all neutral reords
+   s.dff2<- s.dff[!(s.dff["sentiment"] ==0),]
+ # include all NEW set
+  #oversample negative 
+  s.dff3<- s.dff[(s.dff["sentiment"] <0),]
+  s.dff <- rbind(s.dff1 , s.dff2,s.dff3)
+  as.numeric(count(s.dff[s.dff$sentiment <0,]))
+  hist(as.numeric(s.dff$sentiment),main="Re-balanced data set")
+  s.dff$sentiment <- as.factor(s.dff$sentiment) 
+  
+  
+  
+  #SAVE DATA FOR WEKA
+  write.csv(s.dff, file=paste(searchterm, '_WEKA.csv'), row.names=TRUE) #save evaluation results into the file
+#  saveRDS("c:\\data\\dataforWEKATRIMMED.RDS",s.dff)
+  
+  
+  #STATS
+  wordFrequency<- colSums(s.dff[,1:(ncol(s.dff))-1])
+  hist(wordFrequency)  
+  mean(wordFrequency)
+  median(wordFrequency)
+  sd(wordFrequency)
+
+  
+  
+  ### START OF CLASSIFICATION
+  ## Preparing train data
+  
+  ## 70% of the sample size
+  smp_size <- floor(0.7 * nrow(s.dff))
+  ## set the seed to make your partition reproductible
+  set.seed(123)
+  train_ind <- sample(seq_len(nrow(s.dff)), size = smp_size)
+  s.trainData <- s.dff[train_ind, ]
+  s.testData  <- s.dff[-train_ind,]
+
+  
+  ## Running NaiveBayes based on e10071  implementation  
+  
+  nrow(s.dff)
+  ncol(s.dff)
+    
+  ##naiveBayes
+  cmodel <- naiveBayes(sentiment ~ ., data = as.data.frame(s.trainData)[,1:(ncol(s.trainData))], laplace=5)
+  
+  cmodel
+  #cmodel
+  pred <-predict(cmodel, as.data.frame(s.testData)[,1:(ncol(s.testData))-1])
+  pred
+  
+  ####=== Confusion Matrix ===
+  confM <-table(s.testData$sentiment,pred)
+  confusionMatrix(confM)
+  
+  
+  d2 = s.dff
+# add a new column that assigns each row a number from 1 to 10, cutting the data up equally
+d2$fold = cut(1:nrow(d2), breaks=10, labels=F)
+#here are the folds we got:
+unique(d2$fold)
+
+nb.accuracies = c()
+
+ncol(s.dff)
+
+for (i in 1:10) {
+  m.nbi = naiveBayes(d2[d2$fold != i,c(1:ncol(s.dff)-1)], 
+                     d2[d2$fold != i,]$sentiment)
+  
+  pred = predict(m.nbi, d2[d2$fold == i, c(1:ncol(s.dff)-1)])
+  
+  
+  ####=== Confusion Matrix ===
+  #confM <-NULL
+  #confM <-table(d2[d2$fold == i,]$sentiment,pred)
+  #confusionMatrix(confM)
+  
+  numcorrect = sum(pred == d2[d2$fold == i,]$sentiment)
+  nb.accuracies = append(numcorrect / nrow(d2[d2$fold == i,]), nb.accuracies)
+}
+
+nb.accuracies
+mean(nb.accuracies)
+  
+
+#Reference	
+#Predicted	 Event	 No Event
+#Event	 A	 B
+#No Event	 C	 D
+#The formulas used here are:
+#
+#Sensitivity = A/(A+C)
+#
+#Specificity = D/(B+D)
+#
+#Prevalence = (A+C)/(A+B+C+D)
+#
+#PPV = (sensitivity * prevalence)/((sensitivity*prevalence) + ((1-specificity)*(1-prevalence)))
+#
+#NPV = (specificity * (1-prevalence))/(((1-sensitivity)*prevalence) + ((specificity)*(1-prevalence)))
+#
+#Detection Rate = A/(A+B+C+D)
+#
+#Detection Prevalence = (A+B)/(A+B+C+D)
+#
+#Balanced Accuracy = (sensitivity+specificity)/2
+#
+#Precision = A/(A+B)
+#
+#Recall = A/(A+C)
+#
+#F1 = (1+beta^2)*precision*recall/((beta^2 * precision)+recall)
+
+
+
+#using generic Random forest
+#rf <-randomForest(s.trainData, s.trainData$sentiment , prox=TRUE)
+
+rf <-randomForest(s.trainData[,-ncol(s.trainData)], s.trainData[,ncol(s.trainData)], importance=TRUE, keep.forest=TRUE,ntree=100,nodesize = 5, do.trace = 50 )
+
+rf
+
+#rf <-randomForest(sentiment ~ ., s.trainData, keep.forest=TRUE,ntree=100 )
+
+#using caret  RANDOM FOREST
+#rf <- caret::train(sentiment ~ ., method = "rf", data = s.trainData)
+
+
+predictions.rf <- predict(rf, newdata = s.testData[,1:ncol(s.testData) -1])
+confusionMatrix(s.testData$sentiment, predictions.rf)
+
+plot(rf, main = "Error rate of random forest")
+varImpPlot(rf, pch = 20,type=1, main = "Importance of Variables")
+#Showing mean decrease in node impurity
+varImpPlot(rf, pch = 20, type=2,main ="Importance of Variables")
+head(rf$importance,20)
+varImp(rf)
+
+fit<-rf
+#When building a  model (specifically classification tree)  it is often interesting to know what is the #importance of the various variables introduced to the model.
+#most important words for negative,neutral and positive sentiment 
+wordStats <- as.data.frame(fit$importance)
+wordStats$name <- rownames(wordStats)
+colnames(wordStats)[1]<- "Negative"
+colnames(wordStats)[2]<- "Neutral"
+colnames(wordStats)[3]<- "Positive"
+```
+#Popular Words
+```{r popwords, include=TRUE}
+#Negative Words
+head(wordStats[ order(-wordStats[,1]),][1],20)
+#Neutral words
+head(wordStats[ order(-wordStats[,2]),][2],20)
+#Positive  words
+head(wordStats[ order(-wordStats[,3]),][3],20)
+
+getTree(rf, 5, labelVar=TRUE)
+
+library(tree)
+fgl.tr <- tree(sentiment ~ ., data.frame(s.testData))
+summary(fgl.tr)
+plot(fgl.tr); text(fgl.tr, all=TRUE, cex=0.5)
+
+
+```
+
