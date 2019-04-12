@@ -43,31 +43,13 @@ i.	Supervised learning
 	Evaluation of sentiment Classification
 	Application of Sentiment
 5)	Sentiment Mining of Movie Reviews using Random Forest with Tuned Hyperparameters – Focuses on the Random Forest classification. Document describes this classification in the context of Heperparameters. Random Forest is a combination of Decision Trees and parameters which are:
-6)	Number of Trees to construct for the Decision Forest  
-7)	• Number of features to select at random 
-8)	Number of Trees to construct for the Decision Forest  
-9)	• Number of features to select at random 
-10)	Number of Trees to construct for the Decision Forest  
-11)	• Number of features to select at random 
-12)	Number of Trees to construct for the Decision Forest  
-13)	• Number of features to select at random 
-	Number of Trees to construct for the Decision Forest
-	Number of Features to select at random
-	Depth of each Tree
+ -	Number of Trees to construct for the Decision Forest  
+ -	Number of features to select at random 
+ - Depth of each Tree
 Hyperparameters are required to be set manually which could be time consuming and does not guarantee that it will give good results for the parameter was set manually. Each of the hyperparameters have their own importance and influence towards the output prediction. 
 Overall Random Forest guarantees good accuracy when it comes to sentiment analysis
 
-
-
-
-
-
-
-
-
-
-
-
+<H1>Approach</H1>
 1)	Read Data Using Twitter API
 	Open API connection
 	Request Tweets based on Tags
