@@ -1,7 +1,8 @@
 # CAPSTONE  - Sentiment Analysis  (Twitter) Using Naive Bayese
 
 
-Introduction
+<H1>Introduction</H1>
+<br>
 My primary focus will be to conduct sentiment analysis covering one coffee vendor: Starbucks.
  My question will be what do customers like about the company, positive sentiment and what are the shortcomings, negative sentiment. 
  Proposed solution to the problem:
